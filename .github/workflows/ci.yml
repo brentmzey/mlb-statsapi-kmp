@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-and-test:
-    name: Build & Test (Multiplatform)
+    name: Build & Full Integration Tests (JVM, Java, JS, Swift)
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -26,8 +26,17 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      - name: Run Multiplatform Tests
+      - name: Set Up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Multiplatform Test Suite (JVM, Java 17+, JS Browser, JS Node)
         run: ./gradlew check jacocoTestReport
+
+      - name: Run Swift SPM & Apple Interop Test Harness
+        if: matrix.os == 'macos-latest'
+        run: ./scripts/verify_swift_interop.sh
 
       - name: Upload JaCoCo Coverage Report
         if: matrix.os == 'ubuntu-latest'

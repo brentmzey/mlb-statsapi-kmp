@@ -17,6 +17,7 @@ val ktorVersion = "2.3.12"
 val coroutinesVersion = "1.8.1"
 val serializationVersion = "1.6.3"
 val dateTimeVersion = "0.6.0"
+val arrowVersion = "1.2.4"
 
 kotlin {
     jvmToolchain(17)
@@ -51,6 +52,7 @@ kotlin {
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
             implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
             implementation("org.jetbrains.kotlinx:kotlinx-datetime:$dateTimeVersion")
+            implementation("io.arrow-kt:arrow-core:$arrowVersion")
             implementation("io.ktor:ktor-client-core:$ktorVersion")
             implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
             implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")

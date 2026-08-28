@@ -1,20 +1,23 @@
 package com.sabermetrics.statsapi.java
 
+import arrow.core.Either
 import com.sabermetrics.statsapi.MlbStatsApi
+import com.sabermetrics.statsapi.error.MlbStatsError
 import com.sabermetrics.statsapi.models.*
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.future.future
 import kotlinx.coroutines.runBlocking
+import java.util.Optional
 import java.util.concurrent.CompletableFuture
-import kotlinx.coroutines.GlobalScope
 
 /**
- * Java 17+ Interoperability Adapter for MLB-StatsAPI KMP.
- * Provides synchronous blocking and `CompletableFuture` asynchronous methods.
+ * Java 17+ Functional Interoperability Adapter for MLB-StatsAPI KMP.
+ * Supports `Optional.ofNullable`, `Either<MlbStatsError, T>`, and `CompletableFuture<T>`.
  */
 object MlbStatsApiJava {
 
     // =========================================================================
-    // Synchronous Blocking Methods for Java
+    // 1. Synchronous Methods returning Optional / Result
     // =========================================================================
 
     @JvmStatic
@@ -23,8 +26,18 @@ object MlbStatsApiJava {
     }
 
     @JvmStatic
+    fun scheduleEither(date: String): Either<MlbStatsError, List<MlbScheduleGame>> = runBlocking {
+        MlbStatsApi.scheduleEither(date = date)
+    }
+
+    @JvmStatic
     fun standings(season: Int): List<MlbDivisionStandings> = runBlocking {
         MlbStatsApi.standings(season = season)
+    }
+
+    @JvmStatic
+    fun standingsEither(season: Int): Either<MlbStatsError, List<MlbDivisionStandings>> = runBlocking {
+        MlbStatsApi.standingsEither(season = season)
     }
 
     @JvmStatic
@@ -33,8 +46,8 @@ object MlbStatsApiJava {
     }
 
     @JvmStatic
-    fun boxscoreData(gamePk: Long): MlbBoxscoreData = runBlocking {
-        MlbStatsApi.boxscoreData(gamePk = gamePk)
+    fun boxscoreData(gamePk: Long): Optional<MlbBoxscoreData> = runBlocking {
+        Optional.ofNullable(MlbStatsApi.boxscoreDataEither(gamePk = gamePk).getOrNull())
     }
 
     @JvmStatic
@@ -48,8 +61,18 @@ object MlbStatsApiJava {
     }
 
     @JvmStatic
+    fun lookupFirstPlayer(name: String): Optional<MlbPlayerLookup> = runBlocking {
+        Optional.ofNullable(MlbStatsApi.lookupPlayer(lookupValue = name).firstOrNull())
+    }
+
+    @JvmStatic
     fun lookupTeam(name: String): List<MlbTeamLookup> = runBlocking {
         MlbStatsApi.lookupTeam(lookupValue = name)
+    }
+
+    @JvmStatic
+    fun lookupFirstTeam(name: String): Optional<MlbTeamLookup> = runBlocking {
+        Optional.ofNullable(MlbStatsApi.lookupTeam(lookupValue = name).firstOrNull())
     }
 
     @JvmStatic
@@ -57,8 +80,18 @@ object MlbStatsApiJava {
         MlbStatsApi.roster(teamId = teamId)
     }
 
+    @JvmStatic
+    fun lastGame(teamId: Int): Optional<Long> = runBlocking {
+        Optional.ofNullable(MlbStatsApi.lastGame(teamId))
+    }
+
+    @JvmStatic
+    fun nextGame(teamId: Int): Optional<Long> = runBlocking {
+        Optional.ofNullable(MlbStatsApi.nextGame(teamId))
+    }
+
     // =========================================================================
-    // Asynchronous CompletableFuture Methods for Java
+    // 2. Asynchronous CompletableFuture Methods
     // =========================================================================
 
     @JvmStatic

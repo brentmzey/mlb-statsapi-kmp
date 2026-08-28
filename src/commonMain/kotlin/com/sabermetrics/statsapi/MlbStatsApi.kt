@@ -1,5 +1,10 @@
 package com.sabermetrics.statsapi
 
+import arrow.core.*
+import arrow.core.raise.either
+import arrow.core.raise.ensure
+import arrow.core.raise.ensureNotNull
+import com.sabermetrics.statsapi.error.MlbStatsError
 import com.sabermetrics.statsapi.formatters.MlbTableFormatter
 import com.sabermetrics.statsapi.models.*
 import kotlinx.serialization.json.*
@@ -8,30 +13,36 @@ import kotlin.jvm.JvmStatic
 
 /**
  * MLB-StatsAPI Kotlin Multiplatform SDK.
- * Complete 1:1 equivalent to Python `toddrob99/MLB-StatsAPI`.
+ * Functional, strongly-typed, and cross-platform MLB Stats API client powered by Arrow KT.
  */
 object MlbStatsApi {
 
     val client: MlbHttpClient = MlbHttpClient()
 
     // =========================================================================
-    // 1. Generic Universal GET
+    // 1. Generic Universal GET (Functional & Standard)
     // =========================================================================
+
+    @JvmStatic
+    @JvmOverloads
+    suspend fun getEither(endpoint: String, params: Map<String, Any> = emptyMap()): Either<MlbStatsError, JsonObject> {
+        val url = MlbEndpoints.resolveUrl(endpoint, params)
+        return client.getJsonObjectEither(url, params)
+    }
 
     @JvmStatic
     @JvmOverloads
     suspend fun get(endpoint: String, params: Map<String, Any> = emptyMap()): JsonObject {
-        val url = MlbEndpoints.resolveUrl(endpoint, params)
-        return client.getJsonObject(url, params)
+        return getEither(endpoint, params).getOrElse { JsonObject(emptyMap()) }
     }
 
     // =========================================================================
-    // 2. Schedule
+    // 2. Schedule (Functional & Standard)
     // =========================================================================
 
     @JvmStatic
     @JvmOverloads
-    suspend fun schedule(
+    suspend fun scheduleEither(
         date: String? = null,
         startDate: String? = null,
         endDate: String? = null,
@@ -42,7 +53,7 @@ object MlbStatsApi {
         leagueId: Int? = null,
         season: Int? = null,
         includeSeriesStatus: Boolean = true
-    ): List<MlbScheduleGame> {
+    ): Either<MlbStatsError, List<MlbScheduleGame>> = either {
         val params = mutableMapOf<String, Any>()
         if (date != null) {
             params["date"] = date
@@ -62,19 +73,18 @@ object MlbStatsApi {
         params["hydrate"] = hydrate
 
         val url = MlbEndpoints.resolveUrl("schedule")
-        val root = client.getJsonObject(url, params)
+        val root = client.getJsonObjectEither(url, params).bind()
 
-        val gamesList = mutableListOf<MlbScheduleGame>()
-        val datesArray = root["dates"]?.jsonArray ?: return emptyList()
+        val datesArray = root["dates"]?.jsonArray ?: return@either emptyList()
 
-        for (dateElem in datesArray) {
+        datesArray.flatMap { dateElem ->
             val dateObj = dateElem.jsonObject
             val dStr = dateObj["date"]?.jsonPrimitive?.content ?: ""
-            val games = dateObj["games"]?.jsonArray ?: continue
+            val games = dateObj["games"]?.jsonArray ?: emptyList()
 
-            for (gElem in games) {
+            games.mapNotNull { gElem ->
                 val g = gElem.jsonObject
-                val gId = g["gamePk"]?.jsonPrimitive?.longOrNull ?: 0L
+                val gId = g["gamePk"]?.jsonPrimitive?.longOrNull ?: return@mapNotNull null
                 val gDt = g["gameDate"]?.jsonPrimitive?.content ?: ""
                 val gType = g["gameType"]?.jsonPrimitive?.content ?: "R"
                 val status = g["status"]?.jsonObject?.get("detailedState")?.jsonPrimitive?.content ?: ""
@@ -116,59 +126,83 @@ object MlbStatsApi {
                     "$dStr - $awayName @ $homeName ($status)"
                 }
 
-                gamesList.add(
-                    MlbScheduleGame(
-                        gameId = gId,
-                        gameDatetime = gDt,
-                        gameDate = dStr,
-                        gameType = gType,
-                        status = status,
-                        awayName = awayName,
-                        homeName = homeName,
-                        awayId = awayId,
-                        homeId = homeId,
-                        homeProbablePitcher = homeProbable,
-                        awayProbablePitcher = awayProbable,
-                        awayScore = awayScore,
-                        homeScore = homeScore,
-                        venueId = venueId,
-                        venueName = venueName,
-                        winningTeam = winningTeam,
-                        losingTeam = losingTeam,
-                        winningPitcher = winPitcher,
-                        losingPitcher = losePitcher,
-                        savePitcher = savePitcher,
-                        seriesStatus = seriesStatus,
-                        summary = summary
-                    )
+                MlbScheduleGame(
+                    gameId = gId,
+                    gameDatetime = gDt,
+                    gameDate = dStr,
+                    gameType = gType,
+                    status = status,
+                    awayName = awayName,
+                    homeName = homeName,
+                    awayId = awayId,
+                    homeId = homeId,
+                    homeProbablePitcher = homeProbable,
+                    awayProbablePitcher = awayProbable,
+                    awayScore = awayScore,
+                    homeScore = homeScore,
+                    venueId = venueId,
+                    venueName = venueName,
+                    winningTeam = winningTeam,
+                    losingTeam = losingTeam,
+                    winningPitcher = winPitcher,
+                    losingPitcher = losePitcher,
+                    savePitcher = savePitcher,
+                    seriesStatus = seriesStatus,
+                    summary = summary
                 )
             }
         }
-        return gamesList
+    }
+
+    @JvmStatic
+    @JvmOverloads
+    suspend fun schedule(
+        date: String? = null,
+        startDate: String? = null,
+        endDate: String? = null,
+        teamId: Int? = null,
+        opponentId: Int? = null,
+        sportId: Int = 1,
+        gamePk: Long? = null,
+        leagueId: Int? = null,
+        season: Int? = null,
+        includeSeriesStatus: Boolean = true
+    ): List<MlbScheduleGame> {
+        return scheduleEither(
+            date = date,
+            startDate = startDate,
+            endDate = endDate,
+            teamId = teamId,
+            opponentId = opponentId,
+            sportId = sportId,
+            gamePk = gamePk,
+            leagueId = leagueId,
+            season = season,
+            includeSeriesStatus = includeSeriesStatus
+        ).getOrElse { emptyList() }
     }
 
     // =========================================================================
-    // 3. Standings
+    // 3. Standings (Functional & Standard)
     // =========================================================================
 
     @JvmStatic
     @JvmOverloads
-    suspend fun standings(
+    suspend fun standingsEither(
         season: Int? = null,
         leagueId: String = "103,104",
         divisionId: Int? = null
-    ): List<MlbDivisionStandings> {
+    ): Either<MlbStatsError, List<MlbDivisionStandings>> = either {
         val params = mutableMapOf<String, Any>("leagueId" to leagueId)
         if (season != null) params["season"] = season
         if (divisionId != null) params["divisionId"] = divisionId
 
         val url = MlbEndpoints.resolveUrl("standings")
-        val root = client.getJsonObject(url, params)
+        val root = client.getJsonObjectEither(url, params).bind()
 
-        val divisionList = mutableListOf<MlbDivisionStandings>()
-        val records = root["records"]?.jsonArray ?: return emptyList()
+        val records = root["records"]?.jsonArray ?: return@either emptyList()
 
-        for (recElem in records) {
+        records.mapNotNull { recElem ->
             val rec = recElem.jsonObject
             val stType = rec["standingsType"]?.jsonPrimitive?.content ?: "regularSeason"
             val leagueObj = rec["league"]?.jsonObject
@@ -179,14 +213,12 @@ object MlbStatsApi {
             val dId = divObj?.get("id")?.jsonPrimitive?.intOrNull ?: 0
             val dName = divObj?.get("name")?.jsonPrimitive?.content ?: ""
 
-            val teamRecords = mutableListOf<MlbTeamStandingRecord>()
-            val trArray = rec["teamRecords"]?.jsonArray ?: continue
-
-            for (trElem in trArray) {
+            val trArray = rec["teamRecords"]?.jsonArray ?: return@mapNotNull null
+            val teamRecords = trArray.mapNotNull { trElem ->
                 val tr = trElem.jsonObject
                 val tObj = tr["team"]?.jsonObject
-                val teamId = tObj?.get("id")?.jsonPrimitive?.intOrNull ?: 0
-                val teamName = tObj?.get("name")?.jsonPrimitive?.content ?: "Unknown"
+                val teamId = tObj?.get("id")?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
+                val teamName = tObj["name"]?.jsonPrimitive?.content ?: "Unknown"
                 val seasonStr = tr["season"]?.jsonPrimitive?.content ?: season?.toString() ?: "2026"
 
                 val wins = tr["wins"]?.jsonPrimitive?.intOrNull ?: 0
@@ -202,60 +234,64 @@ object MlbStatsApi {
                 val divRank = tr["divisionRank"]?.jsonPrimitive?.content ?: "1"
                 val lgRank = tr["leagueRank"]?.jsonPrimitive?.content ?: "1"
 
-                // Extract last 10 split
                 val splits = tr["records"]?.jsonObject?.get("splitRecords")?.jsonArray ?: emptyList()
                 val l10 = splits.firstOrNull { it.jsonObject["type"]?.jsonPrimitive?.content == "lastTen" }?.jsonObject
                 val l10W = l10?.get("wins")?.jsonPrimitive?.intOrNull ?: 5
                 val l10L = l10?.get("losses")?.jsonPrimitive?.intOrNull ?: 5
 
-                teamRecords.add(
-                    MlbTeamStandingRecord(
-                        teamId = teamId,
-                        teamName = teamName,
-                        season = seasonStr,
-                        wins = wins,
-                        losses = losses,
-                        runDifferential = diff,
-                        runsScored = rs,
-                        runsAllowed = ra,
-                        winPct = winPct,
-                        gamesBack = gb,
-                        wildcardGamesBack = wcGb,
-                        streakCode = streak,
-                        divisionRank = divRank,
-                        leagueRank = lgRank,
-                        last10Wins = l10W,
-                        last10Losses = l10L
-                    )
+                MlbTeamStandingRecord(
+                    teamId = teamId,
+                    teamName = teamName,
+                    season = seasonStr,
+                    wins = wins,
+                    losses = losses,
+                    runDifferential = diff,
+                    runsScored = rs,
+                    runsAllowed = ra,
+                    winPct = winPct,
+                    gamesBack = gb,
+                    wildcardGamesBack = wcGb,
+                    streakCode = streak,
+                    divisionRank = divRank,
+                    leagueRank = lgRank,
+                    last10Wins = l10W,
+                    last10Losses = l10L
                 )
             }
 
-            divisionList.add(
-                MlbDivisionStandings(
-                    divisionId = dId,
-                    divisionName = dName,
-                    leagueId = lId,
-                    leagueName = lName,
-                    standingsType = stType,
-                    teamRecords = teamRecords
-                )
+            MlbDivisionStandings(
+                divisionId = dId,
+                divisionName = dName,
+                leagueId = lId,
+                leagueName = lName,
+                standingsType = stType,
+                teamRecords = teamRecords
             )
         }
-        return divisionList
+    }
+
+    @JvmStatic
+    @JvmOverloads
+    suspend fun standings(
+        season: Int? = null,
+        leagueId: String = "103,104",
+        divisionId: Int? = null
+    ): List<MlbDivisionStandings> {
+        return standingsEither(season, leagueId, divisionId).getOrElse { emptyList() }
     }
 
     // =========================================================================
-    // 4. Boxscore & Linescore
+    // 4. Boxscore & Linescore (Functional & Standard)
     // =========================================================================
 
     @JvmStatic
     @JvmOverloads
-    suspend fun boxscoreData(gamePk: Long, timecode: String? = null): MlbBoxscoreData {
+    suspend fun boxscoreDataEither(gamePk: Long, timecode: String? = null): Either<MlbStatsError, MlbBoxscoreData> = either {
         val params = mutableMapOf<String, Any>("gamePk" to gamePk)
         if (timecode != null) params["timecode"] = timecode
 
         val url = MlbEndpoints.resolveUrl("game_boxscore", mapOf("gamePk" to gamePk))
-        val root = client.getJsonObject(url, params)
+        val root = client.getJsonObjectEither(url, params).bind()
 
         val teams = root["teams"]?.jsonObject
         val away = teams?.get("away")?.jsonObject
@@ -265,65 +301,57 @@ object MlbStatsApi {
         val homeTeamName = home?.get("team")?.jsonObject?.get("name")?.jsonPrimitive?.content ?: "Home"
 
         val parseBatters = { tObj: JsonObject? ->
-            val batters = mutableListOf<MlbBatterBoxRow>()
             val bIds = tObj?.get("batters")?.jsonArray ?: emptyList()
             val players = tObj?.get("players")?.jsonObject
-            for (idElem in bIds) {
+            bIds.mapNotNull { idElem ->
                 val pId = idElem.jsonPrimitive.content
-                val p = players?.get("ID$pId")?.jsonObject ?: continue
-                val stats = p["stats"]?.jsonObject?.get("batting")?.jsonObject ?: continue
+                val p = players?.get("ID$pId")?.jsonObject ?: return@mapNotNull null
+                val stats = p["stats"]?.jsonObject?.get("batting")?.jsonObject ?: return@mapNotNull null
                 val boxName = p["person"]?.jsonObject?.get("fullName")?.jsonPrimitive?.content ?: ""
                 val pos = p["position"]?.jsonObject?.get("abbreviation")?.jsonPrimitive?.content ?: ""
 
-                batters.add(
-                    MlbBatterBoxRow(
-                        nameField = "$boxName $pos".trim(),
-                        ab = stats["atBats"]?.jsonPrimitive?.content ?: "0",
-                        r = stats["runs"]?.jsonPrimitive?.content ?: "0",
-                        h = stats["hits"]?.jsonPrimitive?.content ?: "0",
-                        rbi = stats["rbi"]?.jsonPrimitive?.content ?: "0",
-                        bb = stats["baseOnBalls"]?.jsonPrimitive?.content ?: "0",
-                        k = stats["strikeOuts"]?.jsonPrimitive?.content ?: "0",
-                        lob = stats["leftOnBase"]?.jsonPrimitive?.content ?: "0",
-                        avg = stats["avg"]?.jsonPrimitive?.content ?: ".000",
-                        ops = stats["ops"]?.jsonPrimitive?.content ?: ".000",
-                        personId = pId.toLongOrNull() ?: 0L,
-                        position = pos
-                    )
+                MlbBatterBoxRow(
+                    nameField = "$boxName $pos".trim(),
+                    ab = stats["atBats"]?.jsonPrimitive?.content ?: "0",
+                    r = stats["runs"]?.jsonPrimitive?.content ?: "0",
+                    h = stats["hits"]?.jsonPrimitive?.content ?: "0",
+                    rbi = stats["rbi"]?.jsonPrimitive?.content ?: "0",
+                    bb = stats["baseOnBalls"]?.jsonPrimitive?.content ?: "0",
+                    k = stats["strikeOuts"]?.jsonPrimitive?.content ?: "0",
+                    lob = stats["leftOnBase"]?.jsonPrimitive?.content ?: "0",
+                    avg = stats["avg"]?.jsonPrimitive?.content ?: ".000",
+                    ops = stats["ops"]?.jsonPrimitive?.content ?: ".000",
+                    personId = pId.toLongOrNull() ?: 0L,
+                    position = pos
                 )
             }
-            batters
         }
 
         val parsePitchers = { tObj: JsonObject? ->
-            val pitchers = mutableListOf<MlbPitcherBoxRow>()
             val pIds = tObj?.get("pitchers")?.jsonArray ?: emptyList()
             val players = tObj?.get("players")?.jsonObject
-            for (idElem in pIds) {
+            pIds.mapNotNull { idElem ->
                 val pId = idElem.jsonPrimitive.content
-                val p = players?.get("ID$pId")?.jsonObject ?: continue
-                val stats = p["stats"]?.jsonObject?.get("pitching")?.jsonObject ?: continue
+                val p = players?.get("ID$pId")?.jsonObject ?: return@mapNotNull null
+                val stats = p["stats"]?.jsonObject?.get("pitching")?.jsonObject ?: return@mapNotNull null
                 val boxName = p["person"]?.jsonObject?.get("fullName")?.jsonPrimitive?.content ?: ""
 
-                pitchers.add(
-                    MlbPitcherBoxRow(
-                        nameField = boxName,
-                        ip = stats["inningsPitched"]?.jsonPrimitive?.content ?: "0.0",
-                        h = stats["hits"]?.jsonPrimitive?.content ?: "0",
-                        r = stats["runs"]?.jsonPrimitive?.content ?: "0",
-                        er = stats["earnedRuns"]?.jsonPrimitive?.content ?: "0",
-                        bb = stats["baseOnBalls"]?.jsonPrimitive?.content ?: "0",
-                        k = stats["strikeOuts"]?.jsonPrimitive?.content ?: "0",
-                        hr = stats["homeRuns"]?.jsonPrimitive?.content ?: "0",
-                        era = stats["era"]?.jsonPrimitive?.content ?: "0.00",
-                        personId = pId.toLongOrNull() ?: 0L
-                    )
+                MlbPitcherBoxRow(
+                    nameField = boxName,
+                    ip = stats["inningsPitched"]?.jsonPrimitive?.content ?: "0.0",
+                    h = stats["hits"]?.jsonPrimitive?.content ?: "0",
+                    r = stats["runs"]?.jsonPrimitive?.content ?: "0",
+                    er = stats["earnedRuns"]?.jsonPrimitive?.content ?: "0",
+                    bb = stats["baseOnBalls"]?.jsonPrimitive?.content ?: "0",
+                    k = stats["strikeOuts"]?.jsonPrimitive?.content ?: "0",
+                    hr = stats["homeRuns"]?.jsonPrimitive?.content ?: "0",
+                    era = stats["era"]?.jsonPrimitive?.content ?: "0.00",
+                    personId = pId.toLongOrNull() ?: 0L
                 )
             }
-            pitchers
         }
 
-        return MlbBoxscoreData(
+        MlbBoxscoreData(
             gameId = gamePk,
             awayTeamName = awayTeamName,
             homeTeamName = homeTeamName,
@@ -336,16 +364,27 @@ object MlbStatsApi {
 
     @JvmStatic
     @JvmOverloads
-    suspend fun boxscore(gamePk: Long, timecode: String? = null): String {
-        val data = boxscoreData(gamePk, timecode)
-        return MlbTableFormatter.formatBoxscore(data)
+    suspend fun boxscoreData(gamePk: Long, timecode: String? = null): MlbBoxscoreData {
+        return boxscoreDataEither(gamePk, timecode).fold(
+            ifLeft = { throw RuntimeException(it.message) },
+            ifRight = { it }
+        )
     }
 
     @JvmStatic
     @JvmOverloads
-    suspend fun linescore(gamePk: Long, timecode: String? = null): String {
+    suspend fun boxscore(gamePk: Long, timecode: String? = null): String {
+        return boxscoreDataEither(gamePk, timecode).fold(
+            ifLeft = { "Error loading boxscore: ${it.message}" },
+            ifRight = { MlbTableFormatter.formatBoxscore(it) }
+        )
+    }
+
+    @JvmStatic
+    @JvmOverloads
+    suspend fun linescoreEither(gamePk: Long, timecode: String? = null): Either<MlbStatsError, String> = either {
         val url = MlbEndpoints.resolveUrl("game_linescore", mapOf("gamePk" to gamePk))
-        val root = client.getJsonObject(url)
+        val root = client.getJsonObjectEither(url).bind()
 
         val teams = root["teams"]?.jsonObject
         val away = teams?.get("away")?.jsonObject
@@ -390,24 +429,32 @@ object MlbStatsApi {
             homeErrors = home?.get("errors")?.jsonPrimitive?.intOrNull ?: 0,
             innings = inningsList
         )
-        return MlbTableFormatter.formatLinescore(linescoreData)
+        MlbTableFormatter.formatLinescore(linescoreData)
+    }
+
+    @JvmStatic
+    @JvmOverloads
+    suspend fun linescore(gamePk: Long, timecode: String? = null): String {
+        return linescoreEither(gamePk, timecode).getOrElse { "Error loading linescore: ${it.message}" }
     }
 
     // =========================================================================
-    // 5. Lookups & Player Search
+    // 5. Lookups & Player Search (Functional & Standard)
     // =========================================================================
 
     @JvmStatic
     @JvmOverloads
-    suspend fun lookupPlayer(lookupValue: String, sportId: Int = 1, season: Int? = null): List<MlbPlayerLookup> {
+    suspend fun lookupPlayerEither(lookupValue: String, sportId: Int = 1, season: Int? = null): Either<MlbStatsError, List<MlbPlayerLookup>> = either {
+        ensure(lookupValue.isNotBlank()) { MlbStatsError.InvalidParameterError("lookupValue", "Cannot be blank") }
+
         val params = mutableMapOf<String, Any>("names" to lookupValue, "sportId" to sportId)
         if (season != null) params["season"] = season
 
         val url = MlbEndpoints.resolveUrl("people")
-        val root = client.getJsonObject(url, params)
+        val root = client.getJsonObjectEither(url, params).bind()
 
-        val people = root["people"]?.jsonArray ?: return emptyList()
-        return people.map { pElem ->
+        val people = root["people"]?.jsonArray ?: return@either emptyList()
+        people.map { pElem ->
             val p = pElem.jsonObject
             MlbPlayerLookup(
                 id = p["id"]?.jsonPrimitive?.longOrNull ?: 0L,
@@ -424,16 +471,24 @@ object MlbStatsApi {
 
     @JvmStatic
     @JvmOverloads
-    suspend fun lookupTeam(lookupValue: String, activeStatus: String = "Y", season: Int? = null): List<MlbTeamLookup> {
+    suspend fun lookupPlayer(lookupValue: String, sportId: Int = 1, season: Int? = null): List<MlbPlayerLookup> {
+        return lookupPlayerEither(lookupValue, sportId, season).getOrElse { emptyList() }
+    }
+
+    @JvmStatic
+    @JvmOverloads
+    suspend fun lookupTeamEither(lookupValue: String, activeStatus: String = "Y", season: Int? = null): Either<MlbStatsError, List<MlbTeamLookup>> = either {
+        ensure(lookupValue.isNotBlank()) { MlbStatsError.InvalidParameterError("lookupValue", "Cannot be blank") }
+
         val params = mutableMapOf<String, Any>("sportId" to 1, "activeStatus" to activeStatus)
         if (season != null) params["season"] = season
 
         val url = MlbEndpoints.resolveUrl("teams")
-        val root = client.getJsonObject(url, params)
+        val root = client.getJsonObjectEither(url, params).bind()
 
-        val teams = root["teams"]?.jsonArray ?: return emptyList()
+        val teams = root["teams"]?.jsonArray ?: return@either emptyList()
         val query = lookupValue.lowercase()
-        return teams.mapNotNull { tElem ->
+        teams.mapNotNull { tElem ->
             val t = tElem.jsonObject
             val name = t["name"]?.jsonPrimitive?.content ?: ""
             val code = t["teamCode"]?.jsonPrimitive?.content ?: ""
@@ -456,21 +511,27 @@ object MlbStatsApi {
         }
     }
 
+    @JvmStatic
+    @JvmOverloads
+    suspend fun lookupTeam(lookupValue: String, activeStatus: String = "Y", season: Int? = null): List<MlbTeamLookup> {
+        return lookupTeamEither(lookupValue, activeStatus, season).getOrElse { emptyList() }
+    }
+
     // =========================================================================
-    // 6. Roster
+    // 6. Roster (Functional & Standard)
     // =========================================================================
 
     @JvmStatic
     @JvmOverloads
-    suspend fun roster(teamId: Int, rosterType: String = "active", season: Int? = null): List<MlbRosterMember> {
+    suspend fun rosterEither(teamId: Int, rosterType: String = "active", season: Int? = null): Either<MlbStatsError, List<MlbRosterMember>> = either {
         val params = mutableMapOf<String, Any>("rosterType" to rosterType)
         if (season != null) params["season"] = season
 
         val url = MlbEndpoints.resolveUrl("team_roster", mapOf("teamId" to teamId))
-        val root = client.getJsonObject(url, params)
+        val root = client.getJsonObjectEither(url, params).bind()
 
-        val roster = root["roster"]?.jsonArray ?: return emptyList()
-        return roster.map { rElem ->
+        val roster = root["roster"]?.jsonArray ?: return@either emptyList()
+        roster.map { rElem ->
             val r = rElem.jsonObject
             val person = r["person"]?.jsonObject
             val pos = r["position"]?.jsonObject
@@ -486,29 +547,47 @@ object MlbStatsApi {
         }
     }
 
+    @JvmStatic
+    @JvmOverloads
+    suspend fun roster(teamId: Int, rosterType: String = "active", season: Int? = null): List<MlbRosterMember> {
+        return rosterEither(teamId, rosterType, season).getOrElse { emptyList() }
+    }
+
     // =========================================================================
     // 7. Last & Next Game
     // =========================================================================
 
     @JvmStatic
-    suspend fun lastGame(teamId: Int): Long? {
+    suspend fun lastGameEither(teamId: Int): Either<MlbStatsError, Long> = either {
         val params = mapOf("teamId" to teamId, "sportId" to 1)
         val url = MlbEndpoints.resolveUrl("schedule")
-        val root = client.getJsonObject(url, params)
-        val dates = root["dates"]?.jsonArray ?: return null
-        val lastDate = dates.lastOrNull()?.jsonObject
-        val games = lastDate?.get("games")?.jsonArray ?: return null
-        return games.firstOrNull()?.jsonObject?.get("gamePk")?.jsonPrimitive?.longOrNull
+        val root = client.getJsonObjectEither(url, params).bind()
+        val dates = ensureNotNull(root["dates"]?.jsonArray) { MlbStatsError.EntityNotFoundError("Dates", "teamId=$teamId") }
+        val lastDate = ensureNotNull(dates.lastOrNull()?.jsonObject) { MlbStatsError.EntityNotFoundError("LastDate", "teamId=$teamId") }
+        val games = ensureNotNull(lastDate["games"]?.jsonArray) { MlbStatsError.EntityNotFoundError("Games", "teamId=$teamId") }
+        val gamePk = ensureNotNull(games.firstOrNull()?.jsonObject?.get("gamePk")?.jsonPrimitive?.longOrNull) {
+            MlbStatsError.EntityNotFoundError("GamePk", "teamId=$teamId")
+        }
+        gamePk
     }
 
     @JvmStatic
-    suspend fun nextGame(teamId: Int): Long? {
+    suspend fun lastGame(teamId: Int): Long? = lastGameEither(teamId).getOrNull()
+
+    @JvmStatic
+    suspend fun nextGameEither(teamId: Int): Either<MlbStatsError, Long> = either {
         val params = mapOf("teamId" to teamId, "sportId" to 1)
         val url = MlbEndpoints.resolveUrl("schedule")
-        val root = client.getJsonObject(url, params)
-        val dates = root["dates"]?.jsonArray ?: return null
-        val nextDate = dates.firstOrNull()?.jsonObject
-        val games = nextDate?.get("games")?.jsonArray ?: return null
-        return games.firstOrNull()?.jsonObject?.get("gamePk")?.jsonPrimitive?.longOrNull
+        val root = client.getJsonObjectEither(url, params).bind()
+        val dates = ensureNotNull(root["dates"]?.jsonArray) { MlbStatsError.EntityNotFoundError("Dates", "teamId=$teamId") }
+        val nextDate = ensureNotNull(dates.firstOrNull()?.jsonObject) { MlbStatsError.EntityNotFoundError("NextDate", "teamId=$teamId") }
+        val games = ensureNotNull(nextDate["games"]?.jsonArray) { MlbStatsError.EntityNotFoundError("Games", "teamId=$teamId") }
+        val gamePk = ensureNotNull(games.firstOrNull()?.jsonObject?.get("gamePk")?.jsonPrimitive?.longOrNull) {
+            MlbStatsError.EntityNotFoundError("GamePk", "teamId=$teamId")
+        }
+        gamePk
     }
+
+    @JvmStatic
+    suspend fun nextGame(teamId: Int): Long? = nextGameEither(teamId).getOrNull()
 }

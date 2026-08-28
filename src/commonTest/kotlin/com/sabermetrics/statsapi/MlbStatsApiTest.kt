@@ -1,5 +1,10 @@
 package com.sabermetrics.statsapi
 
+import arrow.core.Either
+import arrow.core.flatMap
+import arrow.core.getOrElse
+import arrow.core.raise.either
+import com.sabermetrics.statsapi.error.MlbStatsError
 import com.sabermetrics.statsapi.formatters.MlbTableFormatter
 import com.sabermetrics.statsapi.models.*
 import kotlinx.coroutines.test.runTest
@@ -83,15 +88,54 @@ class MlbStatsApiTest {
     }
 
     @Test
+    fun testArrowFunctionalEitherCombinators() = runTest {
+        // Monadic validation with Arrow Either
+        val blankLookup: Either<MlbStatsError, List<MlbPlayerLookup>> = MlbStatsApi.lookupPlayerEither("")
+        assertTrue(blankLookup.isLeft())
+        blankLookup.fold(
+            ifLeft = { error ->
+                assertTrue(error is MlbStatsError.InvalidParameterError)
+                assertEquals("lookupValue", error.parameter)
+            },
+            ifRight = {
+                error("Expected failure for blank lookup value")
+            }
+        )
+
+        // Monadic flatMap and map chain
+        val result = blankLookup
+            .map { list -> list.map { it.fullName } }
+            .getOrElse { listOf("Fallback") }
+        assertEquals(listOf("Fallback"), result)
+    }
+
+    @Test
+    fun testArrowEitherDslRaiseBind() = runTest {
+        val computation: Either<MlbStatsError, String> = either {
+            val valid = MlbStatsApi.lookupPlayerEither("Ohtani").bind()
+            val names = valid.map { it.fullName }
+            "Found ${names.size} players"
+        }
+        assertNotNull(computation)
+    }
+
+    @Test
     fun testLiveApiStandingsFetch() = runTest {
         try {
-            val standings = MlbStatsApi.standings(season = 2026)
-            if (standings.isNotEmpty()) {
-                val totalDivisions = standings.size
-                assertTrue(totalDivisions >= 6, "Expected at least 6 MLB divisions")
-                val dodgers = standings.flatMap { it.teamRecords }.firstOrNull { it.teamName.contains("Dodgers") }
-                assertNotNull(dodgers)
-            }
+            val standingsEither = MlbStatsApi.standingsEither(season = 2026)
+            standingsEither.fold(
+                ifLeft = { err ->
+                    println("⚠️ Live API call returned error: ${err.message}")
+                },
+                ifRight = { standings ->
+                    if (standings.isNotEmpty()) {
+                        val totalDivisions = standings.size
+                        assertTrue(totalDivisions >= 6, "Expected at least 6 MLB divisions")
+                        val dodgers = standings.flatMap { it.teamRecords }.firstOrNull { it.teamName.contains("Dodgers") }
+                        assertNotNull(dodgers)
+                    }
+                }
+            )
         } catch (e: Exception) {
             println("⚠️ Live network call skipped in offline environment: ${e.message}")
         }

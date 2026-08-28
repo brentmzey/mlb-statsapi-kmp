@@ -1,0 +1,55 @@
+name: 🔄 Sync Upstream MLB-StatsAPI
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # Daily at 06:00 UTC (01:00 AM Central)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-upstream:
+    name: Check Python Upstream Parity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Out Repository
+        uses: actions/checkout@v4
+
+      - name: Set Up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Fetch Upstream Commits & Endpoints
+        id: upstream_check
+        run: |
+          python3 scripts/sync_python_upstream.py
+
+      - name: Set Up JDK 21
+        if: steps.upstream_check.outputs.has_updates == 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Run Verification Test Suite
+        if: steps.upstream_check.outputs.has_updates == 'true'
+        run: ./gradlew check
+
+      - name: Create Pull Request with Upstream Updates
+        if: steps.upstream_check.outputs.has_updates == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(upstream): sync endpoints with toddrob99/MLB-StatsAPI ${{ steps.upstream_check.outputs.upstream_version }}"
+          title: "🔄 Upstream Sync: MLB-StatsAPI ${{ steps.upstream_check.outputs.upstream_version }}"
+          body: |
+            ### Automated Upstream Synchronization
+            - **Upstream Repository**: https://github.com/toddrob99/MLB-StatsAPI
+            - **Upstream Commit**: `${{ steps.upstream_check.outputs.upstream_commit }}`
+            - **Status**: Verified 100% endpoint parity & multiplatform test suite passed.
+          branch: sync/upstream-mlb-statsapi
+          base: main

@@ -17,7 +17,7 @@ import kotlin.jvm.JvmStatic
  */
 object MlbStatsApi {
 
-    val client: MlbHttpClient = MlbHttpClient()
+    val client: MlbHttpClient by lazy { MlbHttpClient() }
 
     // =========================================================================
     // 1. Generic Universal GET (Functional & Standard)

@@ -19,8 +19,11 @@ val serializationVersion = "1.6.3"
 val dateTimeVersion = "0.6.0"
 val arrowVersion = "1.2.4"
 
+val isXcodeAvailable = file("/Applications/Xcode.app").exists() || System.getenv("GITHUB_ACTIONS") == "true"
+
 kotlin {
     jvmToolchain(17)
+    applyDefaultHierarchyTemplate()
 
     // 1. JVM Target (with Java Interop support)
     jvm {
@@ -37,7 +40,6 @@ kotlin {
     }
 
     // 3. Apple Native Targets (iOS & macOS - Enabled when Xcode is available)
-    val isXcodeAvailable = file("/Applications/Xcode.app").exists() || System.getenv("GITHUB_ACTIONS") == "true"
     if (isXcodeAvailable) {
         iosX64()
         iosArm64()
@@ -75,6 +77,16 @@ kotlin {
             implementation(kotlin("test-junit5"))
             implementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
             implementation("org.junit.jupiter:junit-jupiter-engine:5.10.2")
+        }
+
+        jsMain.dependencies {
+            implementation("io.ktor:ktor-client-js:$ktorVersion")
+        }
+
+        if (isXcodeAvailable) {
+            appleMain.dependencies {
+                implementation("io.ktor:ktor-client-darwin:$ktorVersion")
+            }
         }
     }
 }

@@ -21,8 +21,12 @@ import kotlinx.serialization.json.JsonObject
  * Universal Multiplatform HTTP client for MLB Stats API with Arrow-driven functional error handling.
  */
 class MlbHttpClient(
-    private val client: HttpClient = createDefaultHttpClient()
+    customClient: HttpClient? = null
 ) {
+    val client: HttpClient by lazy {
+        customClient ?: createDefaultHttpClient()
+    }
+
     companion object {
         val jsonParser: Json = Json {
             ignoreUnknownKeys = true

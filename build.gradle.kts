@@ -106,3 +106,22 @@ tasks.register<JacocoReport>("jacocoTestReport") {
     sourceDirectories.setFrom(files("src/commonMain/kotlin", "src/jvmMain/kotlin"))
     executionData.setFrom(fileTree(layout.buildDirectory.dir("jacoco")).matching { include("*.exec") })
 }
+
+tasks.register<JavaExec>("run") {
+    group = "application"
+    description = "Runs the Kotlin Multiplatform MLB-StatsAPI CLI."
+    val jvmTarget = kotlin.targets.getByName("jvm") as org.jetbrains.kotlin.gradle.targets.jvm.KotlinJvmTarget
+    val mainCompilation = jvmTarget.compilations.getByName("main")
+    classpath = mainCompilation.output.allOutputs + mainCompilation.runtimeDependencyFiles
+    mainClass.set("com.sabermetrics.statsapi.cli.MlbStatsCli")
+}
+
+tasks.register<JavaExec>("runJava") {
+    group = "application"
+    description = "Runs the Pure Java 17+ Application Demo."
+    val jvmTarget = kotlin.targets.getByName("jvm") as org.jetbrains.kotlin.gradle.targets.jvm.KotlinJvmTarget
+    val mainCompilation = jvmTarget.compilations.getByName("main")
+    classpath = mainCompilation.output.allOutputs + mainCompilation.runtimeDependencyFiles
+    mainClass.set("com.sabermetrics.statsapi.demo.MlbJavaApp")
+}
+

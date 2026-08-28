@@ -36,11 +36,18 @@ class MlbStatsApiJsIntegrationTest {
     @Test
     fun testJsRuntimePlayerLookupFunctionalStream() = runTest {
         try {
-            val players: List<MlbPlayerLookup> = MlbStatsApi.lookupPlayer("Judge")
-            if (players.isNotEmpty()) {
-                val judge = players.firstOrNull { it.fullName.contains("Aaron") }
-                assertNotNull(judge, "Aaron Judge should be resolvable in JS runtime")
-            }
+            val result: Either<MlbStatsError, List<MlbPlayerLookup>> = MlbStatsApi.lookupPlayerEither("Judge")
+            result.fold(
+                ifLeft = { err ->
+                    println("⚠️ JS Player Lookup skipped in restricted browser sandbox: ${err.message}")
+                },
+                ifRight = { players ->
+                    if (players.isNotEmpty()) {
+                        val judge = players.firstOrNull { it.fullName.contains("Aaron") }
+                        assertNotNull(judge, "Aaron Judge should be resolvable in JS runtime")
+                    }
+                }
+            )
         } catch (e: Exception) {
             println("⚠️ JS Player Lookup skipped: ${e.message}")
         }

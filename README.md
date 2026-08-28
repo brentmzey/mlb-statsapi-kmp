@@ -197,11 +197,44 @@ python3 scripts/sync_python_upstream.py
 
 ---
 
+## 🏃 Native Runnable Applications & Demos
+
+You can pull and immediately execute the native applications across all 4 programming environments:
+
+### 1. Kotlin Multiplatform CLI Application
+```bash
+./gradlew run
+```
+*Fetches live schedule, 2026 MLB division standings, and runs player lookups.*
+
+### 2. Pure Java 17+ Application Demo
+```bash
+./gradlew runJava
+```
+*Executes `MlbStatsApiJava` using Java `Optional.ofNullable`, Stream `.flatMap()`, and `.filter()`.*
+
+### 3. Node.js Native Application
+```bash
+node examples/nodejs/demo.js
+```
+*Executes JavaScript async/await and functional array transformations.*
+
+### 4. Swift / Apple Native Application
+```bash
+swift examples/swift/demo.swift
+```
+*Executes Swift `URLSession` async/await and functional filters.*
+
+---
+
 ## 🧪 Testing
 
 ```bash
-# Run all Multiplatform verification suites (JVM, JS Browser, JS Node, Tests)
+# Run all Multiplatform verification suites (JVM, Java 17+, JS Browser, JS Node)
 ./gradlew check jacocoTestReport
+
+# Run Swift SPM verification harness
+./scripts/verify_swift_interop.sh
 ```
 
 ---

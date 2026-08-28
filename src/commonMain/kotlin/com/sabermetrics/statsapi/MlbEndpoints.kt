@@ -43,6 +43,7 @@ object MlbEndpoints {
         "league_leader_types" to "v1/leagueLeaderTypes",
         "meta" to "v1/{type}",
         "people" to "v1/people",
+        "people_search" to "v1/people/search",
         "person" to "v1/people/{personId}",
         "people_changes" to "v1/people/changes",
         "people_freeAgents" to "v1/people/freeAgents",

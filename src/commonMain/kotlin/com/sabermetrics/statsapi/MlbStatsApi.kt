@@ -447,10 +447,10 @@ object MlbStatsApi {
     suspend fun lookupPlayerEither(lookupValue: String, sportId: Int = 1, season: Int? = null): Either<MlbStatsError, List<MlbPlayerLookup>> = either {
         ensure(lookupValue.isNotBlank()) { MlbStatsError.InvalidParameterError("lookupValue", "Cannot be blank") }
 
-        val params = mutableMapOf<String, Any>("names" to lookupValue, "sportId" to sportId)
+        val params = mutableMapOf<String, Any>("names" to lookupValue, "sportIds" to sportId)
         if (season != null) params["season"] = season
 
-        val url = MlbEndpoints.resolveUrl("people")
+        val url = MlbEndpoints.resolveUrl("people_search")
         val root = client.getJsonObjectEither(url, params).bind()
 
         val people = root["people"]?.jsonArray ?: return@either emptyList()

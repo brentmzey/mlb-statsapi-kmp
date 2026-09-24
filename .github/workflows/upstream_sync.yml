@@ -1,8 +1,8 @@
 name: 🔄 Sync Upstream MLB-StatsAPI
 
 on:
-  schedule:
-    - cron: '0 6 * * *' # Daily at 06:00 UTC (01:00 AM Central)
+  # schedule:
+    # - cron: '0 6 * * *' # Daily at 06:00 UTC (01:00 AM Central)
   workflow_dispatch:
 
 permissions:
